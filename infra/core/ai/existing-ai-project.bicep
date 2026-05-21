@@ -18,6 +18,9 @@ param existingApplicationInsightsConnectionString string = ''
 @description('Existing Application Insights resource ID (already set in the environment)')
 param existingApplicationInsightsResourceId string = ''
 
+@description('Model deployments to create on the existing AI Services account')
+param deployments deploymentsType
+
 @description('List of connections to provision on the existing project')
 param connections array = []
 
@@ -34,6 +37,20 @@ resource aiAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' existing = 
     name: aiFoundryProjectName
   }
 }
+
+// Create model deployments on the existing AI Services account.
+// Uses @batchSize(1) to avoid concurrent deployment conflicts (same as ai-project.bicep).
+@batchSize(1)
+resource seqDeployments 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = [
+  for dep in (deployments ?? []): {
+    parent: aiAccount
+    name: dep.name
+    properties: {
+      model: dep.model
+    }
+    sku: dep.sku
+  }
+]
 
 // Create additional connections from ai.yaml / agent manifest configuration on
 // the existing project. Mirrors the loop in ai-project.bicep so manifest-declared
@@ -94,3 +111,29 @@ output dependentResources object = {
     connectionName: ''
   }
 }
+
+type deploymentsType = {
+  @description('Specify the name of cognitive service account deployment.')
+  name: string
+
+  @description('Required. Properties of Cognitive Services account deployment model.')
+  model: {
+    @description('Required. The name of Cognitive Services account deployment model.')
+    name: string
+
+    @description('Required. The format of Cognitive Services account deployment model.')
+    format: string
+
+    @description('Required. The version of Cognitive Services account deployment model.')
+    version: string
+  }
+
+  @description('The resource model definition representing SKU.')
+  sku: {
+    @description('Required. The name of the resource model definition representing SKU.')
+    name: string
+
+    @description('The capacity of the resource model definition representing SKU.')
+    capacity: int
+  }
+}[]?
